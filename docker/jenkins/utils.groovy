@@ -53,15 +53,12 @@ def pushPrivateReg(port, apps) {
     }
 }
 
-def integrationTestJob(propFileName, appURL) {
-    def testsBaseDir = 'docker/jenkins/properties/integration_tests'
-    def testsFileExt = '.properties'
+def integrationTestJob(propFileName, appURL='') {
     return {
         node {
             unstash 'scripts'
             unstash 'tests'
-            def fullFilename = "${testsBaseDir}/${propFileName}${testsFileExt}"
-            def testScript = "docker/jenkins/run_integration_tests.sh ${fullFilename}".toString()
+            def testScript = "docker/jenkins/run_integration_tests.sh ${propFileName}".toString()
             withCredentials([[$class: 'UsernamePasswordMultiBinding',
                               credentialsId: 'SAUCELABS_CREDENTIALS',
                               usernameVariable: 'SAUCELABS_USERNAME',

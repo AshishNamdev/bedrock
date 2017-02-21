@@ -10,6 +10,8 @@ stage ('Checkout') {
         checkout scm
         sh 'git submodule sync'
         sh 'git submodule update --init --recursive'
+        // clean up
+        sh 'make clean'
         // load the config
         config = readYaml file: 'jenkins.yml'
         // load the utility functions used below
@@ -53,42 +55,34 @@ if ( config.branches.containsKey(env.BRANCH_NAME) ) {
 
     milestone()
     stage ('Test Images') {
-        node {
-            unstash 'scripts'
-            try {
-                sh 'docker/jenkins/run_tests.sh'
-            } catch(err) {
-                utils.ircNotification(config, [stage: 'Unit Test', status: 'failure'])
-                throw err
-            }
-            utils.ircNotification(config, [stage: 'Docker Builds & Tests', status: 'complete'])
-        }
+        parallel([
+            integration_tests: utils.integrationTestJob('local'),
+            unit_tests: {
+                node {
+                    unstash 'scripts'
+                    try {
+                        sh 'docker/jenkins/run_tests.sh'
+                    } catch(err) {
+                        utils.ircNotification(config, [stage: 'Unit Test', status: 'failure'])
+                        throw err
+                    }
+                }
+            },
+        ])
     }
 
     milestone()
     stage ('Push Public Images') {
-        parallel([
-            dockerhub: {
-                node {
-                    unstash 'scripts'
-                    try {
-                        utils.pushDockerhub('mozorg/bedrock_base')
-                        utils.pushDockerhub('mozorg/bedrock_code')
-                        utils.pushDockerhub('mozorg/bedrock_l10n', 'mozorg/bedrock')
-                    } catch(err) {
-                        utils.ircNotification(config, [stage: 'Dockerhub Push Failed', status: 'warning'])
-                    }
-                }
-            },
-            integration_tests: {
-                node {
-                    unstash 'scripts'
-                    unstash 'tests'
-                    // prep for next stage
-                    sh 'docker/jenkins/build_integration_test_image.sh'
-                }
-            },
-        ])
+        node {
+            unstash 'scripts'
+            try {
+                utils.pushDockerhub('mozorg/bedrock_base')
+                utils.pushDockerhub('mozorg/bedrock_code')
+                utils.pushDockerhub('mozorg/bedrock_l10n', 'mozorg/bedrock')
+            } catch(err) {
+                utils.ircNotification(config, [stage: 'Dockerhub Push Failed', status: 'warning'])
+            }
+        }
     }
 
     /**
